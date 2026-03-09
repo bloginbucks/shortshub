@@ -23,16 +23,22 @@ function calcStreak(uploadDates) {
 
 const today = todayStr();
 const [ty,tm] = today.split("-").map(Number);
-const STORAGE_KEY = "shortshub-data-v3";
+
+// 미리보기용 샘플 스케줄 (캘린더 연동 확인용)
+const futureDate1 = makeDate(ty, tm, Math.min(new Date().getDate()+3, 28));
+const futureDate2 = makeDate(ty, tm, Math.min(new Date().getDate()+7, 28));
 
 const INIT_CHANNELS = [{
   id:"ch_1", name:"쇼핑채널", emoji:"🛍️", color:"#E8856A", description:"핫딜 & 리뷰 쇼츠",
-  uploadDates:[today],
-  videos:[{id:"v1",title:"여름 핫딜 TOP5",link:"",date:today,views:0,goal:10000}],
-  goals:[{id:"g1",text:"구독자 1,000명 달성",done:false}],
-  benchmarks:[],
-  ideas:[],
-  schedule:[],
+  uploadDates:[makeDate(ty,tm,Math.max(1,new Date().getDate()-2)), makeDate(ty,tm,Math.max(1,new Date().getDate()-1)), today],
+  videos:[{id:"v1",title:"여름 핫딜 TOP5",link:"",date:today,views:4200,goal:10000}],
+  goals:[{id:"g1",text:"구독자 1,000명 달성",done:false},{id:"g2",text:"조회수 1만 달성",done:true}],
+  benchmarks:[{id:"b1",name:"1분미만",url:"https://youtube.com/@1minute"}],
+  ideas:[{id:"i1",text:"편의점 신상 리뷰 쇼츠",done:false,date:today}],
+  schedule:[
+    {id:"s1",title:"여름 핫딜 TOP10",date:futureDate1,memo:"썸네일 미리 준비",done:false},
+    {id:"s2",title:"신학기 필수템 모음",date:futureDate2,memo:"",done:false},
+  ],
 }];
 
 const EMOJIS = ["🛍️","🏆","🎬","🍔","💄","🎮","💰","🐶","✈️","🏋️","📚","🎵","😂","🌿","⚽","🤖","👗","🏠","🎨","💡"];
@@ -51,13 +57,10 @@ const I = {
   link:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{width:12,height:12}}><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>,
   bulb:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{width:14,height:14}}><path d="M9 18h6M10 22h4M12 2a7 7 0 017 7c0 2.5-1.5 4.5-3 6H8c-1.5-1.5-3-3.5-3-6a7 7 0 017-7z"/></svg>,
   cal:    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{width:14,height:14}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
-  bench:  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{width:14,height:14}}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
 };
 
 export default function App() {
   const [channels,   setChannels]   = useState(INIT_CHANNELS);
-  const [loaded,     setLoaded]     = useState(false);
-  const [saving,     setSaving]     = useState(false);
   const [activeId,   setActiveId]   = useState(null);
   const [tab,        setTab]        = useState("dashboard");
   const [chModal,    setChModal]    = useState(null);
@@ -71,31 +74,17 @@ export default function App() {
   const [addingGoal, setAddingGoal] = useState(false);
   const [calYear,    setCalYear]    = useState(ty);
   const [calMonth,   setCalMonth]   = useState(tm);
-  // 벤치마킹
   const [bmModal,    setBmModal]    = useState(false);
   const [bmForm,     setBmForm]     = useState({name:"",url:""});
-  // 플래닝 - 아이디어
   const [ideaInput,  setIdeaInput]  = useState("");
   const [addingIdea, setAddingIdea] = useState(false);
   const [editIdea,   setEditIdea]   = useState(null);
   const [editIdeaVal,setEditIdeaVal]= useState("");
-  // 플래닝 - 스케줄
   const [scModal,    setScModal]    = useState(false);
   const [scForm,     setScForm]     = useState({title:"",date:"",memo:""});
 
   const ch  = channels.find(c => c.id === activeId);
   const upd = (id, fn) => setChannels(p => p.map(c => c.id===id ? fn(c) : c));
-
-  useEffect(() => {
-    try { const s=localStorage.getItem(STORAGE_KEY); if(s) setChannels(JSON.parse(s)); } catch(_){}
-    setLoaded(true);
-  },[]);
-  useEffect(() => {
-    if(!loaded) return;
-    setSaving(true);
-    const t=setTimeout(()=>{ try{localStorage.setItem(STORAGE_KEY,JSON.stringify(channels));}catch(_){} setSaving(false); },800);
-    return ()=>clearTimeout(t);
-  },[channels,loaded]);
 
   const toggleUpload = () => upd(activeId, c=>{ const s=new Set(c.uploadDates); s.has(today)?s.delete(today):s.add(today); return {...c,uploadDates:[...s]}; });
   const prevMonth = () => { calMonth===1?(setCalYear(y=>y-1),setCalMonth(12)):setCalMonth(m=>m-1); };
@@ -128,22 +117,17 @@ export default function App() {
   const toggleGoal = gid => upd(activeId,c=>({...c,goals:(c.goals||[]).map(g=>g.id===gid?{...g,done:!g.done}:g)}));
   const delGoal    = gid => upd(activeId,c=>({...c,goals:(c.goals||[]).filter(g=>g.id!==gid)}));
 
-  // 벤치마킹 CRUD
   const addBm  = () => { if(!bmForm.name.trim())return; upd(activeId,c=>({...c,benchmarks:[...(c.benchmarks||[]),{id:uid(),...bmForm}]})); setBmForm({name:"",url:""}); setBmModal(false); };
   const delBm  = bid => upd(activeId,c=>({...c,benchmarks:(c.benchmarks||[]).filter(b=>b.id!==bid)}));
 
-  // 아이디어 CRUD
   const addIdea  = () => { if(!ideaInput.trim())return; upd(activeId,c=>({...c,ideas:[...(c.ideas||[]),{id:uid(),text:ideaInput.trim(),done:false,date:today}]})); setIdeaInput(""); setAddingIdea(false); };
   const toggleIdea = iid => upd(activeId,c=>({...c,ideas:(c.ideas||[]).map(i=>i.id===iid?{...i,done:!i.done}:i)}));
   const delIdea  = iid => upd(activeId,c=>({...c,ideas:(c.ideas||[]).filter(i=>i.id!==iid)}));
   const saveIdeaEdit = iid => { upd(activeId,c=>({...c,ideas:(c.ideas||[]).map(i=>i.id===iid?{...i,text:editIdeaVal}:i)})); setEditIdea(null); };
 
-  // 스케줄 CRUD
   const addSc  = () => { if(!scForm.title.trim()||!scForm.date)return; upd(activeId,c=>({...c,schedule:[...(c.schedule||[]),{id:uid(),...scForm,done:false}].sort((a,b)=>a.date.localeCompare(b.date))})); setScForm({title:"",date:"",memo:""}); setScModal(false); };
   const toggleSc = sid => upd(activeId,c=>({...c,schedule:(c.schedule||[]).map(s=>s.id===sid?{...s,done:!s.done}:s)}));
   const delSc  = sid => upd(activeId,c=>({...c,schedule:(c.schedule||[]).filter(s=>s.id!==sid)}));
-
-  if(!loaded) return <div style={{...S.root,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:"#3a3a4a",fontSize:14,letterSpacing:2}}>LOADING</div></div>;
 
   // ══ HOME ══
   if(!activeId) {
@@ -154,7 +138,6 @@ export default function App() {
         <div style={S.hdr}>
           <div><div style={S.logo}>ShortsHub</div><div style={{fontSize:11,color:"#3a3a52",letterSpacing:1,marginTop:1}}>CHANNEL MANAGER</div></div>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
-            {saving&&<div style={{fontSize:11,color:"#3a3a4a",letterSpacing:1}}>saving...</div>}
             <div style={S.pill}>{fmtViews(totViews)} views</div>
           </div>
         </div>
@@ -180,7 +163,7 @@ export default function App() {
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
                     <span style={{fontSize:26}}>{c.emoji}</span>
-                    <div><div style={{fontSize:15,fontWeight:700,color:"#d8d8f0"}}>{c.name}</div><div style={{fontSize:11,color:"#3a3a52",marginTop:1}}>{c.description||"—"}</div></div>
+                    <div><div style={{fontSize:15,fontWeight:700,color:"#d8d8f0"}}>{c.name}</div><div style={{fontSize:11,color:"#5a5a72",marginTop:1}}>{c.description||"—"}</div></div>
                   </div>
                   <div style={{display:"flex",gap:2}}>
                     <button style={S.iBtn} onClick={e=>openEdit(c,e)}>{I.edit}</button>
@@ -193,13 +176,13 @@ export default function App() {
                     <MiniStat icon={I.eye}   label="조회수" val={fmtViews(totV)} color={c.color}/>
                     <MiniStat icon={I.flame} label="연속"  val={`${streak}일`}  color={c.color}/>
                   </div>
-                  {goalsTotal>0&&<div style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:10,color:"#3a3a52",letterSpacing:1}}>GOALS</span><span style={{fontSize:10,color:c.color}}>{goalsDone}/{goalsTotal}</span></div><div style={{height:2,background:"#1e1e2a",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${goalsTotal?Math.round(goalsDone/goalsTotal*100):0}%`,background:c.color,transition:"width .5s"}}/></div></div>}
-                  <div style={{display:"flex",justifyContent:"flex-end"}}><div style={{...S.statusTag,background:done?c.color+"22":"#1e1e2a",color:done?c.color:"#3a3a52",border:`1px solid ${done?c.color+"44":"#2a2a38"}`}}>{done?"업로드 완료":"미업로드"}</div></div>
+                  {goalsTotal>0&&<div style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:10,color:"#4a4a62",letterSpacing:1}}>GOALS</span><span style={{fontSize:10,color:c.color}}>{goalsDone}/{goalsTotal}</span></div><div style={{height:2,background:"#1e1e2a",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${goalsTotal?Math.round(goalsDone/goalsTotal*100):0}%`,background:c.color,transition:"width .5s"}}/></div></div>}
+                  <div style={{display:"flex",justifyContent:"flex-end"}}><div style={{...S.statusTag,background:done?c.color+"22":"#1e1e2a",color:done?c.color:"#4a4a5a",border:`1px solid ${done?c.color+"44":"#3a3a48"}`}}>{done?"업로드 완료":"미업로드"}</div></div>
                 </div>
               </div>
             );
           })}
-          <div style={S.addCard} className="add-card" onClick={openAdd}><div style={{color:"#2a2a38",marginBottom:6}}>{I.plus}</div><span style={{fontSize:12,color:"#2a2a38",letterSpacing:1}}>ADD CHANNEL</span></div>
+          <div style={S.addCard} className="add-card" onClick={openAdd}><div style={{color:"#3a3a50",marginBottom:6}}>{I.plus}</div><span style={{fontSize:12,color:"#3a3a50",letterSpacing:1}}>ADD CHANNEL</span></div>
         </div>
         {chModal&&<ChModal form={chForm} setForm={setChForm} mode={chModal.mode} onSave={saveCh} onClose={()=>setChModal(null)}/>}
         {delConfirm&&<DelModal name={channels.find(c=>c.id===delConfirm)?.name} onCancel={()=>setDelConfirm(null)} onConfirm={execDel}/>}
@@ -214,7 +197,9 @@ export default function App() {
   const {firstDay,daysInMonth}=getMonthInfo(calYear,calMonth);
   const monthUploads=ch.uploadDates.filter(d=>d.startsWith(`${calYear}-${String(calMonth).padStart(2,"0")}`)).length;
   const benchmarks=ch.benchmarks||[],ideas=ch.ideas||[],schedule=ch.schedule||[];
-  const pendingSc=schedule.filter(s=>!s.done&&s.date>=today).slice(0,3);
+
+  // 스케줄 날짜 Set (캘린더 연동용)
+  const scheduleDates = new Set((ch.schedule||[]).filter(s=>!s.done).map(s=>s.date));
 
   return (
     <div style={S.root}><style>{CSS}</style>
@@ -225,12 +210,9 @@ export default function App() {
         </button>
         <div style={{display:"flex",alignItems:"center",gap:10,flex:1}}>
           <span style={{fontSize:24}}>{ch.emoji}</span>
-          <div><div style={{fontSize:17,fontWeight:700,color:"#d8d8f0"}}>{ch.name}</div><div style={{fontSize:11,color:"#3a3a52"}}>{ch.description}</div></div>
+          <div><div style={{fontSize:17,fontWeight:700,color:"#d8d8f0"}}>{ch.name}</div><div style={{fontSize:11,color:"#5a5a72"}}>{ch.description}</div></div>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          {saving&&<span style={{fontSize:11,color:"#3a3a4a",letterSpacing:1}}>saving...</span>}
-          <button style={{...S.iBtn,border:"1px solid #2a2a38",borderRadius:20,padding:"5px 12px",display:"flex",alignItems:"center",gap:5,color:"#5a5a72"}} onClick={e=>openEdit(ch,e)}>{I.edit}<span style={{fontSize:12}}>수정</span></button>
-        </div>
+        <button style={{...S.iBtn,border:"1px solid #2a2a38",borderRadius:20,padding:"5px 12px",display:"flex",alignItems:"center",gap:5,color:"#6a6a82"}} onClick={e=>openEdit(ch,e)}>{I.edit}<span style={{fontSize:12}}>수정</span></button>
       </div>
 
       <div style={S.tabs}>
@@ -244,18 +226,18 @@ export default function App() {
         <div style={S.pad}>
           <div style={{...S.uploadCard,borderColor:uploadedToday?ch.color+"44":"#1e1e2a",background:uploadedToday?ch.color+"0d":"#0e0e16"}}>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <div style={{width:36,height:36,borderRadius:10,background:uploadedToday?ch.color+"22":"#1a1a24",display:"flex",alignItems:"center",justifyContent:"center",color:uploadedToday?ch.color:"#3a3a52",border:`1px solid ${uploadedToday?ch.color+"44":"#2a2a34"}`}}>
+              <div style={{width:36,height:36,borderRadius:10,background:uploadedToday?ch.color+"22":"#1a1a24",display:"flex",alignItems:"center",justifyContent:"center",color:uploadedToday?ch.color:"#4a4a62",border:`1px solid ${uploadedToday?ch.color+"44":"#2a2a34"}`}}>
                 {uploadedToday?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{width:16,height:16}}><polyline points="20 6 9 17 4 12"/></svg>:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{width:16,height:16}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>}
               </div>
               <div>
                 <div style={{fontSize:14,fontWeight:600,color:"#c8c8e0"}}>{uploadedToday?"오늘 업로드 완료":"오늘 아직 미업로드"}</div>
-                <div style={{fontSize:11,color:"#3a3a52",marginTop:2}}>{uploadedToday?`현재 ${streak}일 연속 업로드 중`:"업로드 후 완료 처리하세요"}</div>
+                <div style={{fontSize:11,color:"#5a5a72",marginTop:2}}>{uploadedToday?`현재 ${streak}일 연속 업로드 중`:"업로드 후 완료 처리하세요"}</div>
               </div>
             </div>
             <button style={{...S.uploadBtn,background:uploadedToday?"transparent":ch.color,border:`1px solid ${uploadedToday?ch.color+"66":ch.color}`,color:uploadedToday?ch.color:"#fff"}} onClick={toggleUpload}>{uploadedToday?"취소":"완료"}</button>
           </div>
 
-          {/* 캘린더 */}
+          {/* 캘린더 - 스케줄 연동 */}
           <div style={S.block}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
               <button style={S.calNav} onClick={prevMonth}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:14,height:14}}><polyline points="15 18 9 12 15 6"/></svg></button>
@@ -266,21 +248,48 @@ export default function App() {
               <button style={{...S.calNav,opacity:isCurrentMonth?0.2:1,cursor:isCurrentMonth?"default":"pointer"}} onClick={nextMonth} disabled={isCurrentMonth}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:14,height:14}}><polyline points="9 18 15 12 9 6"/></svg></button>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:6}}>
-              {WEEKDAYS.map((w,i)=><div key={w} style={{textAlign:"center",fontSize:10,letterSpacing:0.5,color:i===0?"#8a4a4a":i===6?"#4a6a8a":"#2a2a3a",fontWeight:600,paddingBottom:2}}>{w}</div>)}
+              {WEEKDAYS.map((w,i)=><div key={w} style={{textAlign:"center",fontSize:10,letterSpacing:0.5,color:i===0?"#a06060":i===6?"#6080a0":"#5a5a72",fontWeight:600,paddingBottom:2}}>{w}</div>)}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
               {Array.from({length:firstDay}).map((_,i)=><div key={"e"+i} style={{aspectRatio:"1"}}/>)}
               {Array.from({length:daysInMonth}).map((_,i)=>{
-                const day=i+1,dateStr=makeDate(calYear,calMonth,day),done=ch.uploadDates.includes(dateStr),isToday=dateStr===today,isFuture=dateStr>today,dow=(firstDay+i)%7;
-                return <div key={day} className={isFuture?"":"cal-day"} style={{aspectRatio:"1",borderRadius:6,background:done?ch.color+"dd":isToday?"#1a1a26":"transparent",border:isToday?`1px solid ${ch.color}55`:"1px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:isFuture?"default":"pointer",opacity:isFuture?0.15:1,transition:"all .15s"}} onClick={()=>{if(isFuture)return;upd(activeId,c=>{const s=new Set(c.uploadDates);s.has(dateStr)?s.delete(dateStr):s.add(dateStr);return {...c,uploadDates:[...s]};});}}>
-                  <span style={{fontSize:11,fontWeight:done?600:400,color:done?"#fff":dow===0?"#7a3a3a":dow===6?"#3a5a7a":"#3a3a52",lineHeight:1}}>{day}</span>
-                </div>;
+                const day=i+1,dateStr=makeDate(calYear,calMonth,day);
+                const done=ch.uploadDates.includes(dateStr);
+                const isScheduled=scheduleDates.has(dateStr);
+                const isToday=dateStr===today,isFuture=dateStr>today;
+                const dow=(firstDay+i)%7;
+
+                // 스타일 결정
+                let bg = "transparent";
+                let border = "1px solid transparent";
+                let textColor = dow===0?"#b06060":dow===6?"#6090b0":"#8a8aa2";
+
+                if(done) {
+                  bg = ch.color+"dd";
+                  textColor = "#fff";
+                } else if(isScheduled) {
+                  bg = "transparent";
+                  border = `1px solid ${ch.color}`;
+                  textColor = ch.color;
+                }
+                if(isToday && !done) {
+                  border = `2px solid ${ch.color}55`;
+                }
+
+                return (
+                  <div key={day} className={isFuture?"":"cal-day"}
+                    style={{aspectRatio:"1",borderRadius:6,background:bg,border,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",cursor:isFuture?"default":"pointer",opacity:isFuture?0.4:1,transition:"all .15s",position:"relative"}}
+                    onClick={()=>{if(isFuture)return;upd(activeId,c=>{const s=new Set(c.uploadDates);s.has(dateStr)?s.delete(dateStr):s.add(dateStr);return {...c,uploadDates:[...s]};});}}>
+                    <span style={{fontSize:11,fontWeight:done||isScheduled?600:400,color:textColor,lineHeight:1}}>{day}</span>
+                  </div>
+                );
               })}
             </div>
-            <div style={{display:"flex",gap:14,marginTop:12,fontSize:10,color:"#3a3a52",alignItems:"center",letterSpacing:0.5}}>
-              <div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:ch.color}}/> UPLOADED</div>
-              <div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:"transparent",border:`1px solid ${ch.color}55`}}/> TODAY</div>
-              <div style={{marginLeft:"auto",color:"#2a2a3a"}}>날짜 클릭으로 수정</div>
+            {/* 범례 */}
+            <div style={{display:"flex",gap:14,marginTop:12,fontSize:10,color:"#5a5a72",alignItems:"center",flexWrap:"wrap"}}>
+              <div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:ch.color}}/> 업로드 완료</div>
+              <div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:"transparent",border:`1px solid ${ch.color}`}}/> 업로드 예정</div>
+              <div style={{marginLeft:"auto",color:"#4a4a62",fontSize:9}}>날짜 클릭으로 수정</div>
             </div>
           </div>
 
@@ -290,7 +299,7 @@ export default function App() {
               <div key={s.label} style={{...S.statCard,borderColor:`${ch.color}22`}}>
                 <div style={{color:ch.color,marginBottom:8,opacity:0.7}}>{s.icon}</div>
                 <div style={{fontSize:22,fontWeight:700,color:"#d8d8f0",letterSpacing:-0.5}}>{s.val}</div>
-                <div style={{fontSize:10,color:"#3a3a52",marginTop:3,letterSpacing:0.5}}>{s.label.toUpperCase()}</div>
+                <div style={{fontSize:10,color:"#5a5a72",marginTop:3,letterSpacing:0.5}}>{s.label.toUpperCase()}</div>
               </div>
             ))}
           </div>
@@ -298,41 +307,42 @@ export default function App() {
           {/* 목표 */}
           <div style={S.block}>
             <div style={{display:"flex",alignItems:"center",marginBottom:14}}>
-              <div style={{fontSize:11,color:"#5a5a72",letterSpacing:2,fontWeight:600}}>GOALS</div>
+              <div style={{fontSize:11,color:"#6a6a82",letterSpacing:2,fontWeight:600}}>GOALS</div>
               {goals.length>0&&<span style={{fontSize:11,color:ch.color,marginLeft:8}}>{goalsDone}/{goals.length}</span>}
               <button style={{marginLeft:"auto",background:"transparent",border:`1px solid ${ch.color}44`,borderRadius:16,padding:"4px 12px",color:ch.color,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}} onClick={()=>setAddingGoal(true)}>{I.plus} ADD</button>
             </div>
             {goals.length>0&&<div style={{height:2,background:"#1a1a24",borderRadius:2,marginBottom:14,overflow:"hidden"}}><div style={{height:"100%",width:`${goals.length?Math.round(goalsDone/goals.length*100):0}%`,background:ch.color,transition:"width .5s"}}/></div>}
-            {goals.length===0&&!addingGoal&&<div style={{textAlign:"center",color:"#2a2a38",padding:"16px 0",fontSize:13}}>목표를 추가해보세요</div>}
+            {goals.length===0&&!addingGoal&&<div style={{textAlign:"center",color:"#4a4a5a",padding:"16px 0",fontSize:13}}>목표를 추가해보세요</div>}
             {goals.map(g=>(
-              <div key={g.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderTop:"1px solid #141420"}}>
+              <div key={g.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderTop:"1px solid #1a1a26"}}>
                 <div style={{width:18,height:18,borderRadius:4,border:`1px solid ${g.done?ch.color:ch.color+"44"}`,background:g.done?ch.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}} onClick={()=>toggleGoal(g.id)}>
                   {g.done&&<svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" style={{width:10,height:10}}><polyline points="20 6 9 17 4 12"/></svg>}
                 </div>
-                <span style={{flex:1,fontSize:13,color:g.done?"#3a3a52":"#c0c0d8",textDecoration:g.done?"line-through":"none"}}>{g.text}</span>
-                <button style={{background:"none",border:"none",cursor:"pointer",color:"#2a2a38",display:"flex"}} onClick={()=>delGoal(g.id)}>{I.close}</button>
+                <span style={{flex:1,fontSize:13,color:g.done?"#4a4a5a":"#c0c0d8",textDecoration:g.done?"line-through":"none"}}>{g.text}</span>
+                {/* X 버튼 - 살짝 더 보이게 */}
+                <button style={{background:"none",border:"none",cursor:"pointer",color:"#5a5a72",display:"flex",padding:"2px"}} onClick={()=>delGoal(g.id)}>{I.close}</button>
               </div>
             ))}
             {addingGoal&&(
               <div style={{display:"flex",gap:8,marginTop:10,alignItems:"center"}}>
                 <input autoFocus style={{...S.input,flex:1,padding:"8px 12px",fontSize:12}} value={goalInput} onChange={e=>setGoalInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addGoal();if(e.key==="Escape"){setAddingGoal(false);setGoalInput("");}}} placeholder="예: 구독자 1,000명 달성"/>
                 <button style={{background:ch.color,border:"none",borderRadius:8,padding:"8px 14px",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}} onClick={addGoal}>추가</button>
-                <button style={{background:"transparent",border:"1px solid #2a2a38",borderRadius:8,padding:"8px 10px",color:"#3a3a52",fontSize:12,cursor:"pointer"}} onClick={()=>{setAddingGoal(false);setGoalInput("");}}>취소</button>
+                <button style={{background:"transparent",border:"1px solid #3a3a4a",borderRadius:8,padding:"8px 10px",color:"#5a5a72",fontSize:12,cursor:"pointer"}} onClick={()=>{setAddingGoal(false);setGoalInput("");}}>취소</button>
               </div>
             )}
           </div>
 
           {/* 최근 영상 */}
           <div style={S.block}>
-            <div style={{fontSize:11,color:"#3a3a52",letterSpacing:2,fontWeight:600,marginBottom:14}}>RECENT VIDEOS</div>
-            {ch.videos.length===0&&<div style={{textAlign:"center",color:"#2a2a38",padding:"16px 0",fontSize:13}}>아직 영상이 없어요</div>}
+            <div style={{fontSize:11,color:"#5a5a72",letterSpacing:2,fontWeight:600,marginBottom:14}}>RECENT VIDEOS</div>
+            {ch.videos.length===0&&<div style={{textAlign:"center",color:"#4a4a5a",padding:"16px 0",fontSize:13}}>아직 영상이 없어요</div>}
             {ch.videos.slice(0,4).map(v=>{
               const pct=Math.min(100,Math.round((v.views/v.goal)*100));
               return (
-                <div key={v.id} style={{display:"flex",alignItems:"center",gap:14,padding:"10px 0",borderTop:"1px solid #141420"}}>
+                <div key={v.id} style={{display:"flex",alignItems:"center",gap:14,padding:"10px 0",borderTop:"1px solid #1a1a26"}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,color:"#c0c0d8",fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{v.title}</div>
-                    <div style={{fontSize:10,color:"#2a2a3a",marginTop:2,letterSpacing:0.5}}>{v.date}</div>
+                    <div style={{fontSize:10,color:"#4a4a5a",marginTop:2,letterSpacing:0.5}}>{v.date}</div>
                     <div style={{height:2,background:"#1a1a24",borderRadius:2,marginTop:6,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:ch.color,borderRadius:2,transition:"width .5s"}}/></div>
                   </div>
                   <div style={{textAlign:"right",flexShrink:0}}>
@@ -350,10 +360,10 @@ export default function App() {
       {tab==="videos"&&(
         <div style={S.pad}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-            <div style={{fontSize:11,color:"#3a3a52",letterSpacing:2,fontWeight:600}}>VIDEOS · {ch.videos.length}</div>
+            <div style={{fontSize:11,color:"#5a5a72",letterSpacing:2,fontWeight:600}}>VIDEOS · {ch.videos.length}</div>
             <button style={{...S.actionBtn,background:ch.color}} onClick={()=>setVidModal(true)}>{I.plus}<span>영상 추가</span></button>
           </div>
-          {ch.videos.length===0&&<div style={{textAlign:"center",color:"#2a2a38",padding:40,fontSize:13}}>영상을 추가해보세요</div>}
+          {ch.videos.length===0&&<div style={{textAlign:"center",color:"#4a4a5a",padding:40,fontSize:13}}>영상을 추가해보세요</div>}
           {ch.videos.map(v=>{
             const pct=Math.min(100,Math.round((v.views/v.goal)*100));
             return (
@@ -361,28 +371,28 @@ export default function App() {
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
                   <div style={{flex:1,minWidth:0,paddingRight:10}}>
                     <div style={{fontSize:14,fontWeight:600,color:"#c8c8e0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{v.title}</div>
-                    <div style={{fontSize:10,color:"#2a2a3a",marginTop:3,letterSpacing:0.5}}>{v.date}</div>
+                    <div style={{fontSize:10,color:"#4a4a5a",marginTop:3,letterSpacing:0.5}}>{v.date}</div>
                   </div>
                   <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
                     {v.link&&<a href={v.link} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",gap:4,border:`1px solid ${ch.color}44`,borderRadius:14,padding:"3px 10px",fontSize:11,textDecoration:"none",color:ch.color}}>{I.link}<span>YouTube</span></a>}
-                    <button style={{...S.iBtn,color:"#3a3a52"}} onClick={()=>delVid(v.id)}>{I.trash}</button>
+                    <button style={{...S.iBtn,color:"#5a5a72"}} onClick={()=>delVid(v.id)}>{I.trash}</button>
                   </div>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
                   <div>
-                    <div style={{fontSize:10,color:"#2a2a3a",marginBottom:4,letterSpacing:0.5}}>VIEWS — 클릭해서 수정</div>
+                    <div style={{fontSize:10,color:"#4a4a5a",marginBottom:4,letterSpacing:0.5}}>VIEWS — 클릭해서 수정</div>
                     {editVid===v.id?(
                       <div style={{display:"flex",gap:6,alignItems:"center"}}>
                         <input autoFocus style={{width:90,background:"#0a0a12",border:`1px solid ${ch.color}44`,borderRadius:6,padding:"5px 8px",color:"#d8d8f0",fontSize:15,fontWeight:700}} type="number" value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveViews(v.id);if(e.key==="Escape")setEditVid(null);}}/>
                         <button style={{background:ch.color,border:"none",borderRadius:6,padding:"5px 10px",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}} onClick={()=>saveViews(v.id)}>저장</button>
-                        <button style={{background:"transparent",border:"1px solid #2a2a38",borderRadius:6,padding:"5px 8px",color:"#3a3a52",fontSize:11,cursor:"pointer"}} onClick={()=>setEditVid(null)}>취소</button>
+                        <button style={{background:"transparent",border:"1px solid #3a3a4a",borderRadius:6,padding:"5px 8px",color:"#5a5a72",fontSize:11,cursor:"pointer"}} onClick={()=>setEditVid(null)}>취소</button>
                       </div>
                     ):(
                       <div style={{fontSize:26,fontWeight:700,color:"#d8d8f0",cursor:"pointer",letterSpacing:-1}} onClick={()=>startEdit(v)}>{fmtViews(v.views)}<span style={{fontSize:12,opacity:.2,marginLeft:4,fontWeight:400}}>✏</span></div>
                     )}
                   </div>
                   <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:10,color:"#2a2a3a",marginBottom:4,letterSpacing:0.5}}>GOAL · {fmtViews(v.goal)}</div>
+                    <div style={{fontSize:10,color:"#4a4a5a",marginBottom:4,letterSpacing:0.5}}>GOAL · {fmtViews(v.goal)}</div>
                     <div style={{fontSize:20,fontWeight:700,color:pct>=100?"#5BAF82":ch.color}}>{pct}%</div>
                   </div>
                 </div>
@@ -408,18 +418,16 @@ export default function App() {
       {tab==="bench"&&(
         <div style={S.pad}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-            <div style={{fontSize:11,color:"#3a3a52",letterSpacing:2,fontWeight:600}}>BENCHMARKS · {benchmarks.length}</div>
+            <div style={{fontSize:11,color:"#5a5a72",letterSpacing:2,fontWeight:600}}>BENCHMARKS · {benchmarks.length}</div>
             <button style={{...S.actionBtn,background:ch.color}} onClick={()=>setBmModal(true)}>{I.plus}<span>채널 추가</span></button>
           </div>
-
           {benchmarks.length===0&&(
             <div style={{textAlign:"center",padding:"40px 20px"}}>
               <div style={{color:ch.color,opacity:0.4,marginBottom:12,display:"flex",justifyContent:"center"}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{width:40,height:40}}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
-              <div style={{color:"#3a3a52",fontSize:13}}>레퍼런스 채널을 추가해보세요</div>
-              <div style={{color:"#2a2a38",fontSize:11,marginTop:4}}>참고하는 유튜브 채널을 저장해두면 편리해요</div>
+              <div style={{color:"#5a5a72",fontSize:13}}>레퍼런스 채널을 추가해보세요</div>
+              <div style={{color:"#4a4a5a",fontSize:11,marginTop:4}}>참고하는 유튜브 채널을 저장해두면 편리해요</div>
             </div>
           )}
-
           {benchmarks.map(b=>(
             <div key={b.id} style={{...S.vidCard,display:"flex",alignItems:"center",gap:14}}>
               <div style={{width:40,height:40,borderRadius:10,background:ch.color+"22",display:"flex",alignItems:"center",justifyContent:"center",color:ch.color,flexShrink:0,border:`1px solid ${ch.color}33`}}>
@@ -427,15 +435,14 @@ export default function App() {
               </div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:14,fontWeight:600,color:"#c8c8e0"}}>{b.name}</div>
-                {b.url&&<div style={{fontSize:11,color:"#3a3a52",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.url}</div>}
+                {b.url&&<div style={{fontSize:11,color:"#5a5a72",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.url}</div>}
               </div>
               <div style={{display:"flex",gap:8,flexShrink:0}}>
                 {b.url&&<a href={b.url.startsWith("http")?b.url:"https://"+b.url} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",gap:4,border:`1px solid ${ch.color}44`,borderRadius:14,padding:"5px 12px",fontSize:12,textDecoration:"none",color:ch.color,fontWeight:600}}>열기 ↗</a>}
-                <button style={{...S.iBtn,color:"#3a3a52"}} onClick={()=>delBm(b.id)}>{I.trash}</button>
+                <button style={{...S.iBtn,color:"#5a5a72"}} onClick={()=>delBm(b.id)}>{I.trash}</button>
               </div>
             </div>
           ))}
-
           {bmModal&&(
             <div style={S.overlay} onClick={()=>setBmModal(false)}>
               <div style={S.modal} onClick={e=>e.stopPropagation()}>
@@ -452,61 +459,49 @@ export default function App() {
       {/* ── 플래닝 ── */}
       {tab==="plan"&&(
         <div style={S.pad}>
-
-          {/* 업로드 스케줄러 */}
           <div style={S.block}>
             <div style={{display:"flex",alignItems:"center",marginBottom:14}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,color:"#5a5a72"}}>
-                {I.cal}<span style={{fontSize:11,letterSpacing:2,fontWeight:600}}>UPLOAD SCHEDULE</span>
-              </div>
+              <div style={{display:"flex",alignItems:"center",gap:6,color:"#6a6a82"}}>{I.cal}<span style={{fontSize:11,letterSpacing:2,fontWeight:600}}>UPLOAD SCHEDULE</span></div>
               <button style={{marginLeft:"auto",background:"transparent",border:`1px solid ${ch.color}44`,borderRadius:16,padding:"4px 12px",color:ch.color,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}} onClick={()=>setScModal(true)}>{I.plus} ADD</button>
             </div>
-
-            {schedule.length===0&&<div style={{textAlign:"center",color:"#2a2a38",padding:"16px 0",fontSize:13}}>예정된 영상을 미리 계획해보세요</div>}
-
+            {schedule.length===0&&<div style={{textAlign:"center",color:"#4a4a5a",padding:"16px 0",fontSize:13}}>예정된 영상을 미리 계획해보세요</div>}
             {schedule.map(s=>{
               const isPast=s.date<today;
               return (
-                <div key={s.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"10px 0",borderTop:"1px solid #141420",opacity:s.done?0.4:1}}>
+                <div key={s.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"10px 0",borderTop:"1px solid #1a1a26",opacity:s.done?0.4:1}}>
                   <div style={{width:18,height:18,borderRadius:4,border:`1px solid ${s.done?ch.color:isPast?"#5a3a3a":ch.color+"44"}`,background:s.done?ch.color:isPast?"#2a1a1a":"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,marginTop:2}} onClick={()=>toggleSc(s.id)}>
                     {s.done&&<svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" style={{width:10,height:10}}><polyline points="20 6 9 17 4 12"/></svg>}
                   </div>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:s.done?"#3a3a52":"#c0c0d8",textDecoration:s.done?"line-through":"none"}}>{s.title}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:s.done?"#4a4a5a":"#c0c0d8",textDecoration:s.done?"line-through":"none"}}>{s.title}</div>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginTop:3}}>
                       <span style={{fontSize:10,color:isPast&&!s.done?"#8a4a4a":ch.color,letterSpacing:0.5}}>{s.date}</span>
                       {isPast&&!s.done&&<span style={{fontSize:9,background:"#3a1a1a",color:"#8a4a4a",borderRadius:4,padding:"1px 6px",letterSpacing:0.5}}>지남</span>}
                     </div>
-                    {s.memo&&<div style={{fontSize:11,color:"#3a3a52",marginTop:3}}>{s.memo}</div>}
+                    {s.memo&&<div style={{fontSize:11,color:"#5a5a72",marginTop:3}}>{s.memo}</div>}
                   </div>
-                  <button style={{background:"none",border:"none",cursor:"pointer",color:"#2a2a38",display:"flex",flexShrink:0}} onClick={()=>delSc(s.id)}>{I.close}</button>
+                  <button style={{background:"none",border:"none",cursor:"pointer",color:"#5a5a72",display:"flex",flexShrink:0}} onClick={()=>delSc(s.id)}>{I.close}</button>
                 </div>
               );
             })}
           </div>
 
-          {/* 아이디어 메모장 */}
           <div style={S.block}>
             <div style={{display:"flex",alignItems:"center",marginBottom:14}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,color:"#5a5a72"}}>
-                {I.bulb}<span style={{fontSize:11,letterSpacing:2,fontWeight:600}}>CONTENT IDEAS</span>
-              </div>
+              <div style={{display:"flex",alignItems:"center",gap:6,color:"#6a6a82"}}>{I.bulb}<span style={{fontSize:11,letterSpacing:2,fontWeight:600}}>CONTENT IDEAS</span></div>
               <span style={{fontSize:11,color:ch.color,marginLeft:8}}>{ideas.filter(i=>!i.done).length}개 대기</span>
               <button style={{marginLeft:"auto",background:"transparent",border:`1px solid ${ch.color}44`,borderRadius:16,padding:"4px 12px",color:ch.color,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}} onClick={()=>setAddingIdea(true)}>{I.plus} ADD</button>
             </div>
-
-            {ideas.length===0&&!addingIdea&&<div style={{textAlign:"center",color:"#2a2a38",padding:"16px 0",fontSize:13}}>떠오르는 아이디어를 바로 적어두세요</div>}
-
+            {ideas.length===0&&!addingIdea&&<div style={{textAlign:"center",color:"#4a4a5a",padding:"16px 0",fontSize:13}}>떠오르는 아이디어를 바로 적어두세요</div>}
             {addingIdea&&(
               <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
                 <input autoFocus style={{...S.input,flex:1,padding:"8px 12px",fontSize:12}} value={ideaInput} onChange={e=>setIdeaInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addIdea();if(e.key==="Escape"){setAddingIdea(false);setIdeaInput("");}}} placeholder="예: 요즘 유행하는 밈으로 쇼츠 만들기"/>
                 <button style={{background:ch.color,border:"none",borderRadius:8,padding:"8px 14px",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}} onClick={addIdea}>추가</button>
-                <button style={{background:"transparent",border:"1px solid #2a2a38",borderRadius:8,padding:"8px 10px",color:"#3a3a52",fontSize:12,cursor:"pointer"}} onClick={()=>{setAddingIdea(false);setIdeaInput("");}}>취소</button>
+                <button style={{background:"transparent",border:"1px solid #3a3a4a",borderRadius:8,padding:"8px 10px",color:"#5a5a72",fontSize:12,cursor:"pointer"}} onClick={()=>{setAddingIdea(false);setIdeaInput("");}}>취소</button>
               </div>
             )}
-
             {ideas.map(idea=>(
-              <div key={idea.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 0",borderTop:"1px solid #141420"}}>
+              <div key={idea.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 0",borderTop:"1px solid #1a1a26"}}>
                 <div style={{width:18,height:18,borderRadius:4,border:`1px solid ${idea.done?ch.color:ch.color+"44"}`,background:idea.done?ch.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,marginTop:2}} onClick={()=>toggleIdea(idea.id)}>
                   {idea.done&&<svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" style={{width:10,height:10}}><polyline points="20 6 9 17 4 12"/></svg>}
                 </div>
@@ -517,11 +512,11 @@ export default function App() {
                       <button style={{background:ch.color,border:"none",borderRadius:6,padding:"5px 10px",color:"#fff",fontSize:11,cursor:"pointer"}} onClick={()=>saveIdeaEdit(idea.id)}>저장</button>
                     </div>
                   ):(
-                    <div style={{fontSize:13,color:idea.done?"#3a3a52":"#c0c0d8",textDecoration:idea.done?"line-through":"none",cursor:"pointer"}} onClick={()=>{setEditIdea(idea.id);setEditIdeaVal(idea.text);}}>{idea.text}<span style={{fontSize:10,opacity:.2,marginLeft:4}}>✏</span></div>
+                    <div style={{fontSize:13,color:idea.done?"#4a4a5a":"#c0c0d8",textDecoration:idea.done?"line-through":"none",cursor:"pointer"}} onClick={()=>{setEditIdea(idea.id);setEditIdeaVal(idea.text);}}>{idea.text}<span style={{fontSize:10,opacity:.2,marginLeft:4}}>✏</span></div>
                   )}
-                  <div style={{fontSize:10,color:"#2a2a3a",marginTop:2}}>{idea.date}</div>
+                  <div style={{fontSize:10,color:"#4a4a5a",marginTop:2}}>{idea.date}</div>
                 </div>
-                <button style={{background:"none",border:"none",cursor:"pointer",color:"#2a2a38",display:"flex",flexShrink:0}} onClick={()=>delIdea(idea.id)}>{I.close}</button>
+                <button style={{background:"none",border:"none",cursor:"pointer",color:"#5a5a72",display:"flex",flexShrink:0}} onClick={()=>delIdea(idea.id)}>{I.close}</button>
               </div>
             ))}
           </div>
@@ -546,22 +541,20 @@ export default function App() {
   );
 }
 
-function MiniStat({icon,label,val,color}){return(<div style={{display:"flex",flexDirection:"column",gap:2}}><div style={{display:"flex",alignItems:"center",gap:4,color,opacity:0.6}}>{icon}<span style={{fontSize:10,letterSpacing:0.5,color:"#3a3a52"}}>{label.toUpperCase()}</span></div><div style={{fontSize:15,fontWeight:700,color:"#c8c8e0"}}>{val}</div></div>);}
-function DelModal({name,onCancel,onConfirm}){return(<div style={S.overlay} onClick={onCancel}><div style={{...S.modal,padding:"28px 24px 32px"}} onClick={e=>e.stopPropagation()}><div style={{fontSize:11,color:"#3a3a52",letterSpacing:2,textAlign:"center",marginBottom:16}}>CONFIRM DELETE</div><div style={{fontSize:16,fontWeight:600,color:"#c8c8e0",textAlign:"center",marginBottom:8}}>{name}</div><div style={{fontSize:13,color:"#3a3a52",textAlign:"center",marginBottom:24,lineHeight:1.6}}>채널과 모든 데이터가<br/>영구적으로 삭제돼요.</div><div style={{display:"flex",gap:10}}><button style={S.cancelBtn} onClick={onCancel}>취소</button><button style={{...S.confirmBtn,background:"#8a3a3a"}} onClick={onConfirm}>삭제</button></div></div></div>);}
+function MiniStat({icon,label,val,color}){return(<div style={{display:"flex",flexDirection:"column",gap:2}}><div style={{display:"flex",alignItems:"center",gap:4,color,opacity:0.6}}>{icon}<span style={{fontSize:10,letterSpacing:0.5,color:"#5a5a72"}}>{label.toUpperCase()}</span></div><div style={{fontSize:15,fontWeight:700,color:"#c8c8e0"}}>{val}</div></div>);}
+function DelModal({name,onCancel,onConfirm}){return(<div style={S.overlay} onClick={onCancel}><div style={{...S.modal,padding:"28px 24px 32px"}} onClick={e=>e.stopPropagation()}><div style={{fontSize:11,color:"#5a5a72",letterSpacing:2,textAlign:"center",marginBottom:16}}>CONFIRM DELETE</div><div style={{fontSize:16,fontWeight:600,color:"#c8c8e0",textAlign:"center",marginBottom:8}}>{name}</div><div style={{fontSize:13,color:"#5a5a72",textAlign:"center",marginBottom:24,lineHeight:1.6}}>채널과 모든 데이터가<br/>영구적으로 삭제돼요.</div><div style={{display:"flex",gap:10}}><button style={S.cancelBtn} onClick={onCancel}>취소</button><button style={{...S.confirmBtn,background:"#8a3a3a"}} onClick={onConfirm}>삭제</button></div></div></div>);}
 function ChModal({form,setForm,mode,onSave,onClose}){return(<div style={S.overlay} onClick={onClose}><div style={S.modal} onClick={e=>e.stopPropagation()}><div style={S.modalTitle}>{mode==="add"?"새 채널":"채널 수정"}</div><Field label="채널명" value={form.name} onChange={v=>setForm(p=>({...p,name:v}))} placeholder="예: 먹방채널"/><Field label="채널 설명" value={form.description} onChange={v=>setForm(p=>({...p,description:v}))} placeholder="채널 소개"/><div style={{marginBottom:16}}><div style={S.fLabel}>이모지</div><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{EMOJIS.map(e=>(<div key={e} style={{fontSize:20,cursor:"pointer",padding:"5px 7px",borderRadius:6,background:form.emoji===e?"#ffffff18":"transparent",border:form.emoji===e?"1px solid #ffffff22":"1px solid transparent"}} onClick={()=>setForm(p=>({...p,emoji:e}))}>{e}</div>))}</div></div><div style={{marginBottom:20}}><div style={S.fLabel}>색상</div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{COLORS.map(c=>(<div key={c} style={{width:26,height:26,borderRadius:"50%",background:c,cursor:"pointer",border:form.color===c?"2px solid #fff":"2px solid transparent",boxShadow:form.color===c?`0 0 0 2px ${c}`:"none"}} onClick={()=>setForm(p=>({...p,color:c}))}/>))}</div></div><div style={S.modalBtns}><button style={S.cancelBtn} onClick={onClose}>취소</button><button style={{...S.confirmBtn,background:form.color}} onClick={onSave}>{mode==="add"?"추가":"저장"}</button></div></div></div>);}
 function Field({label,value,onChange,placeholder,type="text"}){return(<div style={{marginBottom:14}}><div style={S.fLabel}>{label}</div><input style={S.input} type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}/></div>);}
 
-const S={root:{minHeight:"100vh",background:"#08080f",color:"#e0e0f0",fontFamily:"'Pretendard','Apple SD Gothic Neo',sans-serif",paddingBottom:60,maxWidth:680,margin:"0 auto"},hdr:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"22px 20px 16px"},logo:{fontSize:18,fontWeight:700,color:"#c8c8e0",letterSpacing:-0.3},pill:{background:"#111118",border:"1px solid #1e1e2a",borderRadius:20,padding:"4px 12px",fontSize:11,color:"#3a3a52",letterSpacing:0.5},banner:{margin:"0 16px 20px",background:"#0e0e16",border:"1px solid #1a1a24",borderRadius:14,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"},grid:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12,padding:"0 16px"},card:{background:"#0e0e16",border:"1px solid #1a1a24",borderRadius:16,padding:"18px 16px",position:"relative",overflow:"hidden",transition:"all .2s"},addCard:{background:"transparent",border:"1px dashed #1e1e2a",borderRadius:16,minHeight:140,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer",transition:"all .2s"},statusTag:{borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:600,letterSpacing:0.5},iBtn:{background:"none",border:"none",cursor:"pointer",padding:"4px",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:"#3a3a52"},chHdr:{display:"flex",alignItems:"center",gap:12,padding:"16px"},backBtn:{background:"none",border:"1px solid #1e1e2a",color:"#3a3a52",padding:"5px 12px",borderRadius:20,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",gap:5},tabs:{display:"flex",borderBottom:"1px solid #111118",padding:"0 16px",overflowX:"auto"},tab:{background:"none",border:"none",borderBottom:"1px solid transparent",color:"#2a2a42",padding:"11px 14px",cursor:"pointer",fontSize:12,fontWeight:600,transition:"all .2s",letterSpacing:0.5,whiteSpace:"nowrap"},pad:{padding:16},uploadCard:{display:"flex",justifyContent:"space-between",alignItems:"center",border:"1px solid",borderRadius:12,padding:"14px 16px",marginBottom:14,transition:"all .3s"},uploadBtn:{borderRadius:20,padding:"8px 18px",fontWeight:600,cursor:"pointer",fontSize:12,transition:"all .2s",letterSpacing:0.5},block:{background:"#0e0e16",border:"1px solid #141420",borderRadius:12,padding:"16px",marginBottom:12},calNav:{background:"#111118",border:"1px solid #1e1e2a",color:"#3a3a52",borderRadius:8,width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},statsGrid:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginBottom:12},statCard:{background:"#0e0e16",border:"1px solid",borderRadius:12,padding:"14px"},actionBtn:{border:"none",borderRadius:20,padding:"7px 14px",color:"#fff",fontWeight:600,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",gap:5},vidCard:{background:"#0e0e16",border:"1px solid #141420",borderRadius:12,padding:16,marginBottom:10},overlay:{position:"fixed",inset:0,background:"#000000dd",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200},modal:{background:"#0e0e16",border:"1px solid #1e1e2a",borderRadius:"18px 18px 0 0",padding:"22px 18px 36px",width:"100%",maxWidth:480,maxHeight:"90vh",overflowY:"auto"},modalTitle:{fontSize:15,fontWeight:700,color:"#c8c8e0",marginBottom:20},fLabel:{fontSize:10,color:"#3a3a52",marginBottom:6,fontWeight:600,letterSpacing:1},input:{width:"100%",background:"#0a0a12",border:"1px solid #1e1e2a",borderRadius:8,padding:"10px 12px",color:"#c8c8e0",fontSize:13,boxSizing:"border-box"},modalBtns:{display:"flex",gap:10},cancelBtn:{flex:1,background:"transparent",border:"1px solid #1e1e2a",borderRadius:10,padding:11,color:"#3a3a52",cursor:"pointer",fontSize:13},confirmBtn:{flex:1,border:"none",borderRadius:10,padding:11,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13}};
+const S={root:{minHeight:"100vh",background:"#08080f",color:"#e0e0f0",fontFamily:"'Pretendard','Apple SD Gothic Neo',sans-serif",paddingBottom:60,maxWidth:680,margin:"0 auto"},hdr:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"22px 20px 16px"},logo:{fontSize:18,fontWeight:700,color:"#c8c8e0",letterSpacing:-0.3},pill:{background:"#111118",border:"1px solid #1e1e2a",borderRadius:20,padding:"4px 12px",fontSize:11,color:"#4a4a62",letterSpacing:0.5},banner:{margin:"0 16px 20px",background:"#0e0e16",border:"1px solid #1a1a24",borderRadius:14,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"},grid:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12,padding:"0 16px"},card:{background:"#0e0e16",border:"1px solid #1a1a24",borderRadius:16,padding:"18px 16px",position:"relative",overflow:"hidden",transition:"all .2s"},addCard:{background:"transparent",border:"1px dashed #2a2a3a",borderRadius:16,minHeight:140,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer",transition:"all .2s"},statusTag:{borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:600,letterSpacing:0.5},iBtn:{background:"none",border:"none",cursor:"pointer",padding:"4px",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:"#5a5a72"},chHdr:{display:"flex",alignItems:"center",gap:12,padding:"16px"},backBtn:{background:"none",border:"1px solid #2a2a3a",color:"#5a5a72",padding:"5px 12px",borderRadius:20,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",gap:5},tabs:{display:"flex",borderBottom:"1px solid #111118",padding:"0 16px",overflowX:"auto"},tab:{background:"none",border:"none",borderBottom:"1px solid transparent",color:"#3a3a52",padding:"11px 14px",cursor:"pointer",fontSize:12,fontWeight:600,transition:"all .2s",letterSpacing:0.5,whiteSpace:"nowrap"},pad:{padding:16},uploadCard:{display:"flex",justifyContent:"space-between",alignItems:"center",border:"1px solid",borderRadius:12,padding:"14px 16px",marginBottom:14,transition:"all .3s"},uploadBtn:{borderRadius:20,padding:"8px 18px",fontWeight:600,cursor:"pointer",fontSize:12,transition:"all .2s",letterSpacing:0.5},block:{background:"#0e0e16",border:"1px solid #141420",borderRadius:12,padding:"16px",marginBottom:12},calNav:{background:"#111118",border:"1px solid #1e1e2a",color:"#5a5a72",borderRadius:8,width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},statsGrid:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginBottom:12},statCard:{background:"#0e0e16",border:"1px solid",borderRadius:12,padding:"14px"},actionBtn:{border:"none",borderRadius:20,padding:"7px 14px",color:"#fff",fontWeight:600,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",gap:5},vidCard:{background:"#0e0e16",border:"1px solid #141420",borderRadius:12,padding:16,marginBottom:10},overlay:{position:"fixed",inset:0,background:"#000000dd",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200},modal:{background:"#0e0e16",border:"1px solid #1e1e2a",borderRadius:"18px 18px 0 0",padding:"22px 18px 36px",width:"100%",maxWidth:480,maxHeight:"90vh",overflowY:"auto"},modalTitle:{fontSize:15,fontWeight:700,color:"#c8c8e0",marginBottom:20},fLabel:{fontSize:10,color:"#5a5a72",marginBottom:6,fontWeight:600,letterSpacing:1},input:{width:"100%",background:"#0a0a12",border:"1px solid #1e1e2a",borderRadius:8,padding:"10px 12px",color:"#c8c8e0",fontSize:13,boxSizing:"border-box"},modalBtns:{display:"flex",gap:10},cancelBtn:{flex:1,background:"transparent",border:"1px solid #2a2a3a",borderRadius:10,padding:11,color:"#5a5a72",cursor:"pointer",fontSize:13},confirmBtn:{flex:1,border:"none",borderRadius:10,padding:11,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13}};
 
 const CSS=`
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
   * { box-sizing:border-box; } body { margin:0; background:#08080f; }
   .card:hover { border-color: color-mix(in srgb, var(--accent) 30%, transparent) !important; transform:translateY(-2px); }
-  .add-card:hover { border-color:#2a2a38 !important; }
+  .add-card:hover { border-color:#3a3a4a !important; }
   .cal-day:hover { background:#1a1a26 !important; }
-  .dot { display:inline-block;width:5px;height:5px;background:#2a2a42;border-radius:50%;margin:0 2px;animation:bounce .9s infinite; }
-  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-4px)} }
-  input::placeholder { color:#2a2a3a; }
+  input::placeholder { color:#3a3a4a; }
   input:focus { border-color:#3a3a5a !important; outline:none; }
   input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.3); }
   ::-webkit-scrollbar{width:2px;height:2px;} ::-webkit-scrollbar-thumb{background:#1e1e2a;border-radius:2px;}

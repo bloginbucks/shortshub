@@ -75,7 +75,7 @@ export default function App() {
   const [calYear,    setCalYear]    = useState(ty);
   const [calMonth,   setCalMonth]   = useState(tm);
   const [bmModal,    setBmModal]    = useState(false);
-  const [bmForm,     setBmForm]     = useState({name:"",url:""});
+  const [bmForm,     setBmForm]     = useState({name:"",url:"",note:""});
   const [ideaInput,  setIdeaInput]  = useState("");
   const [addingIdea, setAddingIdea] = useState(false);
   const [editIdea,   setEditIdea]   = useState(null);
@@ -117,7 +117,7 @@ export default function App() {
   const toggleGoal = gid => upd(activeId,c=>({...c,goals:(c.goals||[]).map(g=>g.id===gid?{...g,done:!g.done}:g)}));
   const delGoal    = gid => upd(activeId,c=>({...c,goals:(c.goals||[]).filter(g=>g.id!==gid)}));
 
-  const addBm  = () => { if(!bmForm.name.trim())return; upd(activeId,c=>({...c,benchmarks:[...(c.benchmarks||[]),{id:uid(),...bmForm}]})); setBmForm({name:"",url:""}); setBmModal(false); };
+  const addBm  = () => { if(!bmForm.name.trim())return; upd(activeId,c=>({...c,benchmarks:[...(c.benchmarks||[]),{id:uid(),...bmForm}]})); setBmForm({name:"",url:"",note:""}); setBmModal(false); };
   const delBm  = bid => upd(activeId,c=>({...c,benchmarks:(c.benchmarks||[]).filter(b=>b.id!==bid)}));
 
   const addIdea  = () => { if(!ideaInput.trim())return; upd(activeId,c=>({...c,ideas:[...(c.ideas||[]),{id:uid(),text:ideaInput.trim(),done:false,date:today}]})); setIdeaInput(""); setAddingIdea(false); };
@@ -198,9 +198,6 @@ export default function App() {
   const monthUploads=ch.uploadDates.filter(d=>d.startsWith(`${calYear}-${String(calMonth).padStart(2,"0")}`)).length;
   const benchmarks=ch.benchmarks||[],ideas=ch.ideas||[],schedule=ch.schedule||[];
 
-  // 스케줄 날짜 Set (캘린더 연동용)
-  const scheduleDates = new Set((ch.schedule||[]).filter(s=>!s.done).map(s=>s.date));
-
   return (
     <div style={S.root}><style>{CSS}</style>
       <div style={{...S.chHdr,borderBottom:`1px solid ${ch.color}22`}}>
@@ -255,40 +252,22 @@ export default function App() {
               {Array.from({length:daysInMonth}).map((_,i)=>{
                 const day=i+1,dateStr=makeDate(calYear,calMonth,day);
                 const done=ch.uploadDates.includes(dateStr);
-                const isScheduled=scheduleDates.has(dateStr);
                 const isToday=dateStr===today,isFuture=dateStr>today;
                 const dow=(firstDay+i)%7;
-
-                // 스타일 결정
-                let bg = "transparent";
-                let border = "1px solid transparent";
-                let textColor = dow===0?"#b06060":dow===6?"#6090b0":"#8a8aa2";
-
-                if(done) {
-                  bg = ch.color+"dd";
-                  textColor = "#fff";
-                } else if(isScheduled) {
-                  bg = "transparent";
-                  border = `1px solid ${ch.color}`;
-                  textColor = ch.color;
-                }
-                if(isToday && !done) {
-                  border = `2px solid ${ch.color}55`;
-                }
-
+                const bg = done ? ch.color+"dd" : "transparent";
+                const border = isToday && !done ? `2px solid ${ch.color}55` : "1px solid transparent";
+                const textColor = done ? "#fff" : dow===0?"#b06060":dow===6?"#6090b0":"#8a8aa2";
                 return (
-                  <div key={day} className={isFuture?"":"cal-day"}
-                    style={{aspectRatio:"1",borderRadius:6,background:bg,border,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",cursor:isFuture?"default":"pointer",opacity:isFuture?0.4:1,transition:"all .15s",position:"relative"}}
+                  <div key={day}
+                    style={{aspectRatio:"1",borderRadius:6,background:bg,border,display:"flex",alignItems:"center",justifyContent:"center",cursor:isFuture?"default":"pointer",opacity:isFuture?0.4:1,transition:"background .08s"}}
                     onClick={()=>{if(isFuture)return;upd(activeId,c=>{const s=new Set(c.uploadDates);s.has(dateStr)?s.delete(dateStr):s.add(dateStr);return {...c,uploadDates:[...s]};});}}>
-                    <span style={{fontSize:11,fontWeight:done||isScheduled?600:400,color:textColor,lineHeight:1}}>{day}</span>
+                    <span style={{fontSize:11,fontWeight:done?600:400,color:textColor,lineHeight:1,pointerEvents:"none"}}>{day}</span>
                   </div>
                 );
               })}
             </div>
-            {/* 범례 */}
-            <div style={{display:"flex",gap:14,marginTop:12,fontSize:10,color:"#5a5a72",alignItems:"center",flexWrap:"wrap"}}>
+            <div style={{display:"flex",gap:14,marginTop:12,fontSize:10,color:"#5a5a72",alignItems:"center"}}>
               <div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:ch.color}}/> 업로드 완료</div>
-              <div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:"transparent",border:`1px solid ${ch.color}`}}/> 업로드 예정</div>
               <div style={{marginLeft:"auto",color:"#4a4a62",fontSize:9}}>날짜 클릭으로 수정</div>
             </div>
           </div>
@@ -436,6 +415,7 @@ export default function App() {
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:14,fontWeight:600,color:"#c8c8e0"}}>{b.name}</div>
                 {b.url&&<div style={{fontSize:11,color:"#5a5a72",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.url}</div>}
+                {b.note&&<div style={{fontSize:11,color:"#6a6a82",marginTop:4,lineHeight:1.5,borderLeft:`2px solid ${ch.color}44`,paddingLeft:8}}>{b.note}</div>}
               </div>
               <div style={{display:"flex",gap:8,flexShrink:0}}>
                 {b.url&&<a href={b.url.startsWith("http")?b.url:"https://"+b.url} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",gap:4,border:`1px solid ${ch.color}44`,borderRadius:14,padding:"5px 12px",fontSize:12,textDecoration:"none",color:ch.color,fontWeight:600}}>열기 ↗</a>}
@@ -449,6 +429,7 @@ export default function App() {
                 <div style={S.modalTitle}>벤치마킹 채널 추가</div>
                 <Field label="채널명" value={bmForm.name} onChange={v=>setBmForm(p=>({...p,name:v}))} placeholder="예: 침착맨, 1분미만 등"/>
                 <Field label="유튜브 링크" value={bmForm.url} onChange={v=>setBmForm(p=>({...p,url:v}))} placeholder="https://youtube.com/@..."/>
+                <Field label="채널 특징 / 메모" value={bmForm.note} onChange={v=>setBmForm(p=>({...p,note:v}))} placeholder="예: 짧고 임팩트 있는 편집, 썸네일 스타일 참고"/>
                 <div style={S.modalBtns}><button style={S.cancelBtn} onClick={()=>setBmModal(false)}>취소</button><button style={{...S.confirmBtn,background:ch.color}} onClick={addBm}>추가</button></div>
               </div>
             </div>
@@ -553,7 +534,6 @@ const CSS=`
   * { box-sizing:border-box; } body { margin:0; background:#08080f; }
   .card:hover { border-color: color-mix(in srgb, var(--accent) 30%, transparent) !important; transform:translateY(-2px); }
   .add-card:hover { border-color:#3a3a4a !important; }
-  .cal-day:hover { background:#1a1a26 !important; }
   input::placeholder { color:#3a3a4a; }
   input:focus { border-color:#3a3a5a !important; outline:none; }
   input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.3); }

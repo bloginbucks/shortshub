@@ -20,25 +20,30 @@ function calcStreak(uploadDates) {
   while(true){const s=makeDate(d.getFullYear(),d.getMonth()+1,d.getDate());if(set.has(s)){streak++;d.setDate(d.getDate()-1);}else break;}
   return streak;
 }
+// 구버전 채널 데이터 안전하게 마이그레이션
+function migrateChannel(c) {
+  return {
+    ...c,
+    benchmarks: c.benchmarks||[],
+    ideas: c.ideas||[],
+    schedule: c.schedule||[],
+    goals: c.goals||[],
+    videos: (c.videos||[]).map(v=>({goal:10000,...v})),
+  };
+}
 
 const today = todayStr();
 const [ty,tm] = today.split("-").map(Number);
-
-// 미리보기용 샘플 스케줄 (캘린더 연동 확인용)
-const futureDate1 = makeDate(ty, tm, Math.min(new Date().getDate()+3, 28));
-const futureDate2 = makeDate(ty, tm, Math.min(new Date().getDate()+7, 28));
+const STORAGE_KEY = "shortshub-data-v3";
 
 const INIT_CHANNELS = [{
   id:"ch_1", name:"쇼핑채널", emoji:"🛍️", color:"#E8856A", description:"핫딜 & 리뷰 쇼츠",
   uploadDates:[makeDate(ty,tm,Math.max(1,new Date().getDate()-2)), makeDate(ty,tm,Math.max(1,new Date().getDate()-1)), today],
   videos:[{id:"v1",title:"여름 핫딜 TOP5",link:"",date:today,views:4200,goal:10000}],
   goals:[{id:"g1",text:"구독자 1,000명 달성",done:false},{id:"g2",text:"조회수 1만 달성",done:true}],
-  benchmarks:[{id:"b1",name:"1분미만",url:"https://youtube.com/@1minute"}],
+  benchmarks:[{id:"b1",name:"1분미만",url:"https://youtube.com/@1minute",note:"짧고 임팩트 있는 편집 스타일 참고"}],
   ideas:[{id:"i1",text:"편의점 신상 리뷰 쇼츠",done:false,date:today}],
-  schedule:[
-    {id:"s1",title:"여름 핫딜 TOP10",date:futureDate1,memo:"썸네일 미리 준비",done:false},
-    {id:"s2",title:"신학기 필수템 모음",date:futureDate2,memo:"",done:false},
-  ],
+  schedule:[],
 }];
 
 const EMOJIS = ["🛍️","🏆","🎬","🍔","💄","🎮","💰","🐶","✈️","🏋️","📚","🎵","😂","🌿","⚽","🤖","👗","🏠","🎨","💡"];
@@ -57,34 +62,56 @@ const I = {
   link:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{width:12,height:12}}><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>,
   bulb:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{width:14,height:14}}><path d="M9 18h6M10 22h4M12 2a7 7 0 017 7c0 2.5-1.5 4.5-3 6H8c-1.5-1.5-3-3.5-3-6a7 7 0 017-7z"/></svg>,
   cal:    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{width:14,height:14}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  up:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:13,height:13}}><polyline points="18 15 12 9 6 15"/></svg>,
+  down:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:13,height:13}}><polyline points="6 9 12 15 18 9"/></svg>,
 };
 
 export default function App() {
-  const [channels,   setChannels]   = useState(INIT_CHANNELS);
-  const [activeId,   setActiveId]   = useState(null);
-  const [tab,        setTab]        = useState("dashboard");
-  const [chModal,    setChModal]    = useState(null);
-  const [chForm,     setChForm]     = useState({name:"",emoji:"🎬",color:"#7B6FD4",description:""});
-  const [vidModal,   setVidModal]   = useState(false);
-  const [vidForm,    setVidForm]    = useState({title:"",link:"",goal:"10000"});
-  const [editVid,    setEditVid]    = useState(null);
-  const [editVal,    setEditVal]    = useState("");
-  const [delConfirm, setDelConfirm] = useState(null);
-  const [goalInput,  setGoalInput]  = useState("");
-  const [addingGoal, setAddingGoal] = useState(false);
-  const [calYear,    setCalYear]    = useState(ty);
-  const [calMonth,   setCalMonth]   = useState(tm);
-  const [bmModal,    setBmModal]    = useState(false);
-  const [bmForm,     setBmForm]     = useState({name:"",url:"",note:""});
-  const [ideaInput,  setIdeaInput]  = useState("");
-  const [addingIdea, setAddingIdea] = useState(false);
-  const [editIdea,   setEditIdea]   = useState(null);
-  const [editIdeaVal,setEditIdeaVal]= useState("");
-  const [scModal,    setScModal]    = useState(false);
-  const [scForm,     setScForm]     = useState({title:"",date:"",memo:""});
+  const [channels,    setChannels]   = useState(INIT_CHANNELS);
+  const [loaded,      setLoaded]     = useState(false);
+  const [saving,      setSaving]     = useState(false);
+  const [activeId,    setActiveId]   = useState(null);
+  const [tab,         setTab]        = useState("dashboard");
+  const [chModal,     setChModal]    = useState(null);
+  const [chForm,      setChForm]     = useState({name:"",emoji:"🎬",color:"#7B6FD4",description:""});
+  const [vidModal,    setVidModal]   = useState(false);
+  const [vidForm,     setVidForm]    = useState({title:"",link:"",goal:"10000"});
+  const [editVid,     setEditVid]    = useState(null);
+  const [editVal,     setEditVal]    = useState("");
+  const [editGoalVid, setEditGoalVid]= useState(null);
+  const [editGoalVal, setEditGoalVal]= useState("");
+  const [delVidConf,  setDelVidConf] = useState(null); // 영상 삭제 확인
+  const [delConfirm,  setDelConfirm] = useState(null);
+  const [goalInput,   setGoalInput]  = useState("");
+  const [addingGoal,  setAddingGoal] = useState(false);
+  const [calYear,     setCalYear]    = useState(ty);
+  const [calMonth,    setCalMonth]   = useState(tm);
+  const [bmModal,     setBmModal]    = useState(false);
+  const [bmForm,      setBmForm]     = useState({name:"",url:"",note:""});
+  const [ideaInput,   setIdeaInput]  = useState("");
+  const [addingIdea,  setAddingIdea] = useState(false);
+  const [editIdea,    setEditIdea]   = useState(null);
+  const [editIdeaVal, setEditIdeaVal]= useState("");
+  const [scModal,     setScModal]    = useState(false);
+  const [scForm,      setScForm]     = useState({title:"",date:"",memo:""});
 
   const ch  = channels.find(c => c.id === activeId);
   const upd = (id, fn) => setChannels(p => p.map(c => c.id===id ? fn(c) : c));
+
+  // localStorage 저장/불러오기 (마이그레이션 포함)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) setChannels(JSON.parse(saved).map(migrateChannel));
+    } catch(_){}
+    setLoaded(true);
+  },[]);
+  useEffect(() => {
+    if(!loaded) return;
+    setSaving(true);
+    const t = setTimeout(()=>{ try{localStorage.setItem(STORAGE_KEY,JSON.stringify(channels));}catch(_){} setSaving(false); },800);
+    return ()=>clearTimeout(t);
+  },[channels,loaded]);
 
   const toggleUpload = () => upd(activeId, c=>{ const s=new Set(c.uploadDates); s.has(today)?s.delete(today):s.add(today); return {...c,uploadDates:[...s]}; });
   const prevMonth = () => { calMonth===1?(setCalYear(y=>y-1),setCalMonth(12)):setCalMonth(m=>m-1); };
@@ -103,15 +130,29 @@ export default function App() {
   const confirmDel = (id,e) => { e?.stopPropagation(); setDelConfirm(id); };
   const execDel    = () => { setChannels(p=>p.filter(c=>c.id!==delConfirm)); if(activeId===delConfirm)setActiveId(null); setDelConfirm(null); };
 
+  // 채널 순서 이동
+  const moveChannel = (id, dir) => {
+    setChannels(p => {
+      const i = p.findIndex(c=>c.id===id);
+      const n = i + dir;
+      if(n<0||n>=p.length) return p;
+      const arr = [...p];
+      [arr[i],arr[n]] = [arr[n],arr[i]];
+      return arr;
+    });
+  };
+
   const addVid = () => {
     if(!vidForm.title.trim()) return;
     const v={id:uid(),title:vidForm.title,link:vidForm.link,date:today,views:0,goal:parseInt(vidForm.goal)||10000};
     upd(activeId,c=>{ const s=new Set(c.uploadDates); s.add(today); return {...c,videos:[v,...c.videos],uploadDates:[...s]}; });
     setVidForm({title:"",link:"",goal:"10000"}); setVidModal(false);
   };
-  const delVid    = vid => upd(activeId,c=>({...c,videos:c.videos.filter(v=>v.id!==vid)}));
-  const startEdit = v   => { setEditVid(v.id); setEditVal(String(v.views)); };
-  const saveViews = vid => { upd(activeId,c=>({...c,videos:c.videos.map(v=>v.id===vid?{...v,views:parseInt(editVal)||0}:v)})); setEditVid(null); };
+  const execDelVid = () => { upd(activeId,c=>({...c,videos:c.videos.filter(v=>v.id!==delVidConf)})); setDelVidConf(null); };
+  const startEdit  = v => { setEditVid(v.id); setEditVal(String(v.views)); };
+  const saveViews  = vid => { upd(activeId,c=>({...c,videos:c.videos.map(v=>v.id===vid?{...v,views:parseInt(editVal)||0}:v)})); setEditVid(null); };
+  const startGoalEdit = v => { setEditGoalVid(v.id); setEditGoalVal(String(v.goal)); };
+  const saveGoal   = vid => { upd(activeId,c=>({...c,videos:c.videos.map(v=>v.id===vid?{...v,goal:parseInt(editGoalVal)||10000}:v)})); setEditGoalVid(null); };
 
   const addGoal    = () => { if(!goalInput.trim())return; upd(activeId,c=>({...c,goals:[...(c.goals||[]),{id:uid(),text:goalInput.trim(),done:false}]})); setGoalInput(""); setAddingGoal(false); };
   const toggleGoal = gid => upd(activeId,c=>({...c,goals:(c.goals||[]).map(g=>g.id===gid?{...g,done:!g.done}:g)}));
@@ -125,9 +166,11 @@ export default function App() {
   const delIdea  = iid => upd(activeId,c=>({...c,ideas:(c.ideas||[]).filter(i=>i.id!==iid)}));
   const saveIdeaEdit = iid => { upd(activeId,c=>({...c,ideas:(c.ideas||[]).map(i=>i.id===iid?{...i,text:editIdeaVal}:i)})); setEditIdea(null); };
 
-  const addSc  = () => { if(!scForm.title.trim()||!scForm.date)return; upd(activeId,c=>({...c,schedule:[...(c.schedule||[]),{id:uid(),...scForm,done:false}].sort((a,b)=>a.date.localeCompare(b.date))})); setScForm({title:"",date:"",memo:""}); setScModal(false); };
+  const addSc    = () => { if(!scForm.title.trim()||!scForm.date)return; upd(activeId,c=>({...c,schedule:[...(c.schedule||[]),{id:uid(),...scForm,done:false}].sort((a,b)=>a.date.localeCompare(b.date))})); setScForm({title:"",date:"",memo:""}); setScModal(false); };
   const toggleSc = sid => upd(activeId,c=>({...c,schedule:(c.schedule||[]).map(s=>s.id===sid?{...s,done:!s.done}:s)}));
-  const delSc  = sid => upd(activeId,c=>({...c,schedule:(c.schedule||[]).filter(s=>s.id!==sid)}));
+  const delSc    = sid => upd(activeId,c=>({...c,schedule:(c.schedule||[]).filter(s=>s.id!==sid)}));
+
+  if(!loaded) return <div style={{...S.root,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:"#3a3a4a",fontSize:14,letterSpacing:2}}>LOADING</div></div>;
 
   // ══ HOME ══
   if(!activeId) {
@@ -138,6 +181,7 @@ export default function App() {
         <div style={S.hdr}>
           <div><div style={S.logo}>ShortsHub</div><div style={{fontSize:11,color:"#3a3a52",letterSpacing:1,marginTop:1}}>CHANNEL MANAGER</div></div>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
+            {saving&&<div style={{fontSize:11,color:"#3a3a4a",letterSpacing:1}}>saving...</div>}
             <div style={S.pill}>{fmtViews(totViews)} views</div>
           </div>
         </div>
@@ -154,7 +198,7 @@ export default function App() {
         </div>
         <div style={{padding:"0 20px 10px",fontSize:11,color:"#3a3a52",letterSpacing:2}}>CHANNELS</div>
         <div style={S.grid}>
-          {channels.map(c=>{
+          {channels.map((c,ci)=>{
             const done=c.uploadDates.includes(today),streak=calcStreak(c.uploadDates),totV=c.videos.reduce((a,v)=>a+(v.views||0),0);
             const goalsDone=(c.goals||[]).filter(g=>g.done).length,goalsTotal=(c.goals||[]).length;
             return (
@@ -165,9 +209,15 @@ export default function App() {
                     <span style={{fontSize:26}}>{c.emoji}</span>
                     <div><div style={{fontSize:15,fontWeight:700,color:"#d8d8f0"}}>{c.name}</div><div style={{fontSize:11,color:"#5a5a72",marginTop:1}}>{c.description||"—"}</div></div>
                   </div>
-                  <div style={{display:"flex",gap:2}}>
-                    <button style={S.iBtn} onClick={e=>openEdit(c,e)}>{I.edit}</button>
-                    <button style={S.iBtn} onClick={e=>confirmDel(c.id,e)}>{I.trash}</button>
+                  <div style={{display:"flex",gap:2,flexDirection:"column",alignItems:"flex-end"}}>
+                    <div style={{display:"flex",gap:2}}>
+                      <button style={S.iBtn} onClick={e=>openEdit(c,e)}>{I.edit}</button>
+                      <button style={S.iBtn} onClick={e=>confirmDel(c.id,e)}>{I.trash}</button>
+                    </div>
+                    <div style={{display:"flex",gap:2}}>
+                      <button style={{...S.iBtn,opacity:ci===0?0.2:1}} onClick={e=>{e.stopPropagation();moveChannel(c.id,-1);}} disabled={ci===0}>{I.up}</button>
+                      <button style={{...S.iBtn,opacity:ci===channels.length-1?0.2:1}} onClick={e=>{e.stopPropagation();moveChannel(c.id,1);}} disabled={ci===channels.length-1}>{I.down}</button>
+                    </div>
                   </div>
                 </div>
                 <div onClick={()=>{setActiveId(c.id);setTab("dashboard");setCalYear(ty);setCalMonth(tm);}} style={{cursor:"pointer"}}>
@@ -209,7 +259,10 @@ export default function App() {
           <span style={{fontSize:24}}>{ch.emoji}</span>
           <div><div style={{fontSize:17,fontWeight:700,color:"#d8d8f0"}}>{ch.name}</div><div style={{fontSize:11,color:"#5a5a72"}}>{ch.description}</div></div>
         </div>
-        <button style={{...S.iBtn,border:"1px solid #2a2a38",borderRadius:20,padding:"5px 12px",display:"flex",alignItems:"center",gap:5,color:"#6a6a82"}} onClick={e=>openEdit(ch,e)}>{I.edit}<span style={{fontSize:12}}>수정</span></button>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {saving&&<span style={{fontSize:11,color:"#3a3a4a",letterSpacing:1}}>saving...</span>}
+          <button style={{...S.iBtn,border:"1px solid #2a2a38",borderRadius:20,padding:"5px 12px",display:"flex",alignItems:"center",gap:5,color:"#6a6a82"}} onClick={e=>openEdit(ch,e)}>{I.edit}<span style={{fontSize:12}}>수정</span></button>
+        </div>
       </div>
 
       <div style={S.tabs}>
@@ -234,7 +287,7 @@ export default function App() {
             <button style={{...S.uploadBtn,background:uploadedToday?"transparent":ch.color,border:`1px solid ${uploadedToday?ch.color+"66":ch.color}`,color:uploadedToday?ch.color:"#fff"}} onClick={toggleUpload}>{uploadedToday?"취소":"완료"}</button>
           </div>
 
-          {/* 캘린더 - 스케줄 연동 */}
+          {/* 캘린더 */}
           <div style={S.block}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
               <button style={S.calNav} onClick={prevMonth}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:14,height:14}}><polyline points="15 18 9 12 15 6"/></svg></button>
@@ -254,9 +307,9 @@ export default function App() {
                 const done=ch.uploadDates.includes(dateStr);
                 const isToday=dateStr===today,isFuture=dateStr>today;
                 const dow=(firstDay+i)%7;
-                const bg = done ? ch.color+"dd" : "transparent";
-                const border = isToday && !done ? `2px solid ${ch.color}55` : "1px solid transparent";
-                const textColor = done ? "#fff" : dow===0?"#b06060":dow===6?"#6090b0":"#8a8aa2";
+                const bg=done?ch.color+"dd":"transparent";
+                const border=isToday&&!done?`2px solid ${ch.color}55`:"1px solid transparent";
+                const textColor=done?"#fff":dow===0?"#b06060":dow===6?"#6090b0":"#8a8aa2";
                 return (
                   <div key={day}
                     style={{aspectRatio:"1",borderRadius:6,background:bg,border,display:"flex",alignItems:"center",justifyContent:"center",cursor:isFuture?"default":"pointer",opacity:isFuture?0.4:1,transition:"background .08s"}}
@@ -298,7 +351,6 @@ export default function App() {
                   {g.done&&<svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" style={{width:10,height:10}}><polyline points="20 6 9 17 4 12"/></svg>}
                 </div>
                 <span style={{flex:1,fontSize:13,color:g.done?"#4a4a5a":"#c0c0d8",textDecoration:g.done?"line-through":"none"}}>{g.text}</span>
-                {/* X 버튼 - 살짝 더 보이게 */}
                 <button style={{background:"none",border:"none",cursor:"pointer",color:"#5a5a72",display:"flex",padding:"2px"}} onClick={()=>delGoal(g.id)}>{I.close}</button>
               </div>
             ))}
@@ -354,7 +406,7 @@ export default function App() {
                   </div>
                   <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
                     {v.link&&<a href={v.link} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",gap:4,border:`1px solid ${ch.color}44`,borderRadius:14,padding:"3px 10px",fontSize:11,textDecoration:"none",color:ch.color}}>{I.link}<span>YouTube</span></a>}
-                    <button style={{...S.iBtn,color:"#5a5a72"}} onClick={()=>delVid(v.id)}>{I.trash}</button>
+                    <button style={{...S.iBtn,color:"#5a5a72"}} onClick={()=>setDelVidConf(v.id)}>{I.trash}</button>
                   </div>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
@@ -371,8 +423,15 @@ export default function App() {
                     )}
                   </div>
                   <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:10,color:"#4a4a5a",marginBottom:4,letterSpacing:0.5}}>GOAL · {fmtViews(v.goal)}</div>
-                    <div style={{fontSize:20,fontWeight:700,color:pct>=100?"#5BAF82":ch.color}}>{pct}%</div>
+                    <div style={{fontSize:10,color:"#4a4a5a",marginBottom:4,letterSpacing:0.5}}>GOAL — 클릭해서 수정</div>
+                    {editGoalVid===v.id?(
+                      <div style={{display:"flex",gap:6,alignItems:"center",justifyContent:"flex-end"}}>
+                        <input autoFocus style={{width:90,background:"#0a0a12",border:`1px solid ${ch.color}44`,borderRadius:6,padding:"5px 8px",color:"#d8d8f0",fontSize:13,fontWeight:700,textAlign:"right"}} type="number" value={editGoalVal} onChange={e=>setEditGoalVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveGoal(v.id);if(e.key==="Escape")setEditGoalVid(null);}}/>
+                        <button style={{background:ch.color,border:"none",borderRadius:6,padding:"5px 10px",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}} onClick={()=>saveGoal(v.id)}>저장</button>
+                      </div>
+                    ):(
+                      <div style={{fontSize:20,fontWeight:700,color:pct>=100?"#5BAF82":ch.color,cursor:"pointer"}} onClick={()=>startGoalEdit(v)}>{pct}%<span style={{fontSize:10,color:"#4a4a5a",fontWeight:400,marginLeft:4}}>{fmtViews(v.goal)}<span style={{opacity:.3,marginLeft:2}}>✏</span></span></div>
+                    )}
                   </div>
                 </div>
                 <div style={{height:2,background:"#1a1a24",borderRadius:2,marginTop:12,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:ch.color,borderRadius:2,transition:"width .5s"}}/></div>
@@ -387,6 +446,15 @@ export default function App() {
                 <Field label="유튜브 링크 (선택)" value={vidForm.link} onChange={v=>setVidForm(p=>({...p,link:v}))} placeholder="https://youtube.com/shorts/..."/>
                 <Field label="목표 조회수" value={vidForm.goal} onChange={v=>setVidForm(p=>({...p,goal:v}))} placeholder="10000" type="number"/>
                 <div style={S.modalBtns}><button style={S.cancelBtn} onClick={()=>setVidModal(false)}>취소</button><button style={{...S.confirmBtn,background:ch.color}} onClick={addVid}>추가</button></div>
+              </div>
+            </div>
+          )}
+          {delVidConf&&(
+            <div style={S.overlay} onClick={()=>setDelVidConf(null)}>
+              <div style={{...S.modal,padding:"28px 24px 32px"}} onClick={e=>e.stopPropagation()}>
+                <div style={{fontSize:11,color:"#5a5a72",letterSpacing:2,textAlign:"center",marginBottom:16}}>영상 삭제</div>
+                <div style={{fontSize:13,color:"#5a5a72",textAlign:"center",marginBottom:24,lineHeight:1.6}}>이 영상을 삭제할까요?<br/>되돌릴 수 없어요.</div>
+                <div style={S.modalBtns}><button style={S.cancelBtn} onClick={()=>setDelVidConf(null)}>취소</button><button style={{...S.confirmBtn,background:"#8a3a3a"}} onClick={execDelVid}>삭제</button></div>
               </div>
             </div>
           )}
@@ -408,19 +476,21 @@ export default function App() {
             </div>
           )}
           {benchmarks.map(b=>(
-            <div key={b.id} style={{...S.vidCard,display:"flex",alignItems:"center",gap:14}}>
-              <div style={{width:40,height:40,borderRadius:10,background:ch.color+"22",display:"flex",alignItems:"center",justifyContent:"center",color:ch.color,flexShrink:0,border:`1px solid ${ch.color}33`}}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{width:18,height:18}}><path d="M22.54 6.42a2.78 2.78 0 00-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 001.46 6.42 29 29 0 001 12a29 29 0 00.46 5.58 2.78 2.78 0 001.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 001.95-1.96A29 29 0 0023 12a29 29 0 00-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="currentColor"/></svg>
+            <div key={b.id} style={{...S.vidCard}}>
+              <div style={{display:"flex",alignItems:"center",gap:14}}>
+                <div style={{width:40,height:40,borderRadius:10,background:ch.color+"22",display:"flex",alignItems:"center",justifyContent:"center",color:ch.color,flexShrink:0,border:`1px solid ${ch.color}33`}}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{width:18,height:18}}><path d="M22.54 6.42a2.78 2.78 0 00-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 001.46 6.42 29 29 0 001 12a29 29 0 00.46 5.58 2.78 2.78 0 001.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 001.95-1.96A29 29 0 0023 12a29 29 0 00-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="currentColor"/></svg>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:600,color:"#c8c8e0"}}>{b.name}</div>
+                  {b.url&&<div style={{fontSize:11,color:"#5a5a72",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.url}</div>}
+                </div>
+                <div style={{display:"flex",gap:8,flexShrink:0}}>
+                  {b.url&&<a href={b.url.startsWith("http")?b.url:"https://"+b.url} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",gap:4,border:`1px solid ${ch.color}44`,borderRadius:14,padding:"5px 12px",fontSize:12,textDecoration:"none",color:ch.color,fontWeight:600}}>열기 ↗</a>}
+                  <button style={{...S.iBtn,color:"#5a5a72"}} onClick={()=>delBm(b.id)}>{I.trash}</button>
+                </div>
               </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:14,fontWeight:600,color:"#c8c8e0"}}>{b.name}</div>
-                {b.url&&<div style={{fontSize:11,color:"#5a5a72",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.url}</div>}
-                {b.note&&<div style={{fontSize:11,color:"#6a6a82",marginTop:4,lineHeight:1.5,borderLeft:`2px solid ${ch.color}44`,paddingLeft:8}}>{b.note}</div>}
-              </div>
-              <div style={{display:"flex",gap:8,flexShrink:0}}>
-                {b.url&&<a href={b.url.startsWith("http")?b.url:"https://"+b.url} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",gap:4,border:`1px solid ${ch.color}44`,borderRadius:14,padding:"5px 12px",fontSize:12,textDecoration:"none",color:ch.color,fontWeight:600}}>열기 ↗</a>}
-                <button style={{...S.iBtn,color:"#5a5a72"}} onClick={()=>delBm(b.id)}>{I.trash}</button>
-              </div>
+              {b.note&&<div style={{marginTop:10,fontSize:12,color:"#6a6a82",lineHeight:1.6,borderLeft:`2px solid ${ch.color}44`,paddingLeft:10}}>{b.note}</div>}
             </div>
           ))}
           {bmModal&&(
@@ -469,7 +539,7 @@ export default function App() {
 
           <div style={S.block}>
             <div style={{display:"flex",alignItems:"center",marginBottom:14}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,color:"#6a6a82"}}>{I.bulb}<span style={{fontSize:11,letterSpacing:2,fontWeight:600}}>CONTENT IDEAS</span></div>
+              <div style={{display:"flex",alignItems:"center",gap:6,color:"#6a6a82"}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{width:14,height:14}}><path d="M9 18h6M10 22h4M12 2a7 7 0 017 7c0 2.5-1.5 4.5-3 6H8c-1.5-1.5-3-3.5-3-6a7 7 0 017-7z"/></svg><span style={{fontSize:11,letterSpacing:2,fontWeight:600}}>CONTENT IDEAS</span></div>
               <span style={{fontSize:11,color:ch.color,marginLeft:8}}>{ideas.filter(i=>!i.done).length}개 대기</span>
               <button style={{marginLeft:"auto",background:"transparent",border:`1px solid ${ch.color}44`,borderRadius:16,padding:"4px 12px",color:ch.color,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}} onClick={()=>setAddingIdea(true)}>{I.plus} ADD</button>
             </div>
